@@ -132,7 +132,7 @@ async function doSpin() {
   render();
 
   try {
-    if (!state.user) throw new Error("LOGIN_REQUIRED");
+    if (!state.accessToken) throw new Error("LOGIN_REQUIRED");
     if (state.balanceCredits < currentBet) throw new Error("INSUFFICIENT_BALANCE");
 
     const r = await api("/api/spin", {
@@ -296,12 +296,12 @@ function renderGame() {
       el("button", {
         class: `spin-btn ${state.isSpinning ? "spinning" : ""}`,
         onClick: doSpin,
-        disabled: state.isSpinning || !state.user || state.balanceCredits < currentBet,
+        disabled: state.isSpinning || !state.accessToken || state.balanceCredits < currentBet,
       }, [state.isSpinning ? "⏳" : "🎰 ÇEVİR"]),
     ]),
-    state.lastSpin && state.lastSpin.winCredits > 0
-      ? el("div", { class: "last-win" }, [`Son Kazanç: ${fmt(state.lastSpin.winCredits)} kredi`])
-      : null,
+    ...(state.lastSpin && state.lastSpin.winCredits > 0
+      ? [el("div", { class: "last-win" }, [`Son Kazanç: ${fmt(state.lastSpin.winCredits)} kredi`])]
+      : []),
   ]);
 }
 
