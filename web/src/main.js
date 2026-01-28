@@ -454,11 +454,9 @@ function render() {
 
   const err = state.lastError ? el("div", { class: "error-toast" }, [`⚠️ ${state.lastError}`]) : null;
 
-  root.append(
-    pageContent,
-    renderBottomMenu(),
-    err,
-    el("style", {}, [
+  const elementsToAppend = [pageContent, renderBottomMenu()];
+  if (err) elementsToAppend.push(err);
+  elementsToAppend.push(el("style", {}, [
       `
       :root {
         --bg: #0a0e27;
@@ -854,8 +852,9 @@ function render() {
         .logo { font-size: 36px; }
       }
       `,
-    ]),
-  );
+    ]));
+
+  root.append(...elementsToAppend);
 }
 
 render();
