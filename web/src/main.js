@@ -74,11 +74,32 @@ async function login() {
   });
 
   state.accessToken = auth.accessToken;
+  localStorage.setItem("pi_accessToken", state.accessToken);
+  
   const verified = await api("/api/auth/verify", { body: { accessToken: state.accessToken } });
   state.user = verified.user;
   state.balanceCredits = verified.balanceCredits;
   state.creditsPerPi = verified.creditsPerPi;
   render();
+}
+
+async function restoreSession() {
+  const savedToken = localStorage.getItem("pi_accessToken");
+  if (!savedToken) return;
+  
+  try {
+    state.accessToken = savedToken;
+    const verified = await api("/api/auth/verify", { body: { accessToken: state.accessToken } });
+    state.user = verified.user;
+    state.balanceCredits = verified.balanceCredits;
+    state.creditsPerPi = verified.creditsPerPi;
+    render();
+  } catch (e) {
+    // Token geçersiz, temizle
+    localStorage.removeItem("pi_accessToken");
+    state.accessToken = null;
+    state.user = null;
+  }
 }
 
 async function refreshBalance() {
@@ -111,6 +132,8 @@ async function deposit(amountPi) {
           body: { accessToken: state.accessToken, txid },
         });
         state.balanceCredits = r.balanceCredits;
+        // Balance'ı tekrar çek (backend'den güncel hali)
+        await refreshBalance();
         render();
       },
       onCancel: async () => {
@@ -128,16 +151,27 @@ async function deposit(amountPi) {
 async function doSpin() {
   if (state.isSpinning) return;
   state.lastError = null;
+  
+  if (!state.accessToken) {
+    state.lastError = "Giriş yapmanız gerekiyor";
+    render();
+    return;
+  }
+  
+  if (state.balanceCredits < currentBet) {
+    state.lastError = `Yetersiz bakiye! Gerekli: ${currentBet} kredi`;
+    render();
+    return;
+  }
+  
   state.isSpinning = true;
   render();
 
   try {
-    if (!state.accessToken) throw new Error("LOGIN_REQUIRED");
-    if (state.balanceCredits < currentBet) throw new Error("INSUFFICIENT_BALANCE");
-
     const r = await api("/api/spin", {
       body: { accessToken: state.accessToken, betCredits: currentBet },
     });
+    
     state.lastSpin = r;
     state.balanceCredits = r.balanceCredits;
     state.gameState = r.gameResult;
@@ -164,7 +198,8 @@ async function doSpin() {
       setTimeout(() => animateCascade(r.gameResult), 500);
     }
   } catch (e) {
-    state.lastError = e.message;
+    console.error("Spin error:", e);
+    state.lastError = e.message || "Spin hatası oluştu";
     render();
   } finally {
     state.isSpinning = false;
@@ -295,7 +330,17 @@ function renderGame() {
     el("div", { class: "game-controls" }, [
       el("button", {
         class: `spin-btn ${state.isSpinning ? "spinning" : ""}`,
-        onClick: doSpin,
+        onClick: (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log("Spin button clicked", { 
+            isSpinning: state.isSpinning, 
+            hasToken: !!state.accessToken, 
+            balance: state.balanceCredits, 
+            bet: currentBet 
+          });
+          doSpin();
+        },
         disabled: state.isSpinning || !state.accessToken || state.balanceCredits < currentBet,
       }, [state.isSpinning ? "⏳" : "🎰 ÇEVİR"]),
     ]),
@@ -857,4 +902,7 @@ function render() {
   root.append(...elementsToAppend);
 }
 
-render();
+// Sayfa yüklendiğinde session'ı restore et
+restoreSession().then(() => {
+  render();
+});
