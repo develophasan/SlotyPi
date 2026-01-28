@@ -1,19 +1,9 @@
 import { prisma } from "../db.js";
 import { getBalanceCredits } from "./balance.js";
+import { playGame, processBonusPick } from "./game.js";
 
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-// Very simple placeholder paytable; we'll tune RTP later.
-// Returns multiplier (e.g. 0, 1, 2, 5, 10)
-function sampleMultiplier() {
-  const r = Math.random();
-  if (r < 0.60) return 0; // 60% lose
-  if (r < 0.85) return 1; // 25% break-even
-  if (r < 0.95) return 2; // 10% double
-  if (r < 0.99) return 5; // 4% x5
-  return 10; // 1% x10
 }
 
 export async function spin({ userId, betCredits }) {
@@ -45,8 +35,9 @@ export async function spin({ userId, betCredits }) {
       },
     });
 
-    const multiplier = sampleMultiplier();
-    const winCredits = betCredits * multiplier;
+    // Play the game
+    const gameResult = playGame(betCredits);
+    const winCredits = gameResult.totalWin;
 
     if (winCredits > 0) {
       await tx.ledgerEntry.create({
@@ -56,7 +47,14 @@ export async function spin({ userId, betCredits }) {
           amountCredits: winCredits,
           refType: "spin",
           refId: spinId,
-          meta: JSON.stringify({ betCredits, multiplier, winCredits }),
+          meta: JSON.stringify({
+            betCredits,
+            winCredits,
+            clusters: gameResult.clusters.length,
+            multipliers: gameResult.multipliers,
+            bonusTriggered: gameResult.bonusTriggered,
+            bonusBoard: gameResult.bonusBoard,
+          }),
         },
       });
     }
@@ -69,11 +67,62 @@ export async function spin({ userId, betCredits }) {
     return {
       spinId,
       betCredits,
-      multiplier,
       winCredits,
       balanceCredits: newBal._sum.amountCredits ?? 0,
+      gameResult: {
+        initialGrid: gameResult.grid,
+        clusters: gameResult.clusters,
+        cascadeSteps: gameResult.cascadeSteps,
+        multipliers: gameResult.multipliers,
+        bonusTriggered: gameResult.bonusTriggered,
+        bonusBoard: gameResult.bonusBoard,
+      },
     };
   });
+}
+
+export async function bonusPick({ userId, spinId, picks }) {
+  // Retrieve bonus board from spin metadata (check both BET and PAYOUT entries)
+  const spinEntry = await prisma.ledgerEntry.findFirst({
+    where: {
+      refType: "spin",
+      refId: spinId,
+      userId,
+      OR: [{ type: "BET" }, { type: "PAYOUT" }],
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!spinEntry) throw new Error("SPIN_NOT_FOUND");
+
+  const meta = JSON.parse(spinEntry.meta || "{}");
+  if (!meta.bonusBoard) throw new Error("NO_BONUS_BOARD");
+
+  const result = processBonusPick(meta.bonusBoard, picks);
+  const bonusWin = result.win;
+
+  if (bonusWin > 0) {
+    await prisma.ledgerEntry.create({
+      data: {
+        userId,
+        type: "PAYOUT",
+        amountCredits: bonusWin,
+        refType: "bonus_pick",
+        refId: `${spinId}_bonus`,
+        meta: JSON.stringify({ spinId, picks, bonusWin }),
+      },
+    });
+  }
+
+  const newBal = await prisma.ledgerEntry.aggregate({
+    where: { userId },
+    _sum: { amountCredits: true },
+  });
+
+  return {
+    bonusWin,
+    matched: result.matched,
+    balanceCredits: newBal._sum.amountCredits ?? 0,
+  };
 }
 
 

@@ -6,7 +6,7 @@ import { prisma } from "./db.js";
 import { piApprovePayment, piCompletePayment, piGetMe } from "./piPlatform.js";
 import { getBalanceCredits } from "./logic/balance.js";
 import { creditDepositIfComplete, upsertUserFromMe } from "./logic/payments.js";
-import { spin } from "./logic/spin.js";
+import { spin, bonusPick } from "./logic/spin.js";
 
 const app = express();
 app.use(
@@ -36,37 +36,41 @@ app.post("/api/auth/verify", async (req, res) => {
 });
 
 // --- Payments (U2A) ---
-app.post("/api/payments/:paymentId/approve", async (req, res) => {
-  const paymentId = z.string().min(5).parse(req.params.paymentId);
-  const Body = z.object({ accessToken: z.string().min(10) });
-  const { accessToken } = Body.parse(req.body);
+app.post("/api/payments/:paymentId/approve", async (req, res, next) => {
+  try {
+    const paymentId = z.string().min(5).parse(req.params.paymentId);
+    const Body = z.object({ accessToken: z.string().min(10) });
+    const { accessToken } = Body.parse(req.body);
 
-  // Verify user identity and bind payment to that user in our DB for audit.
-  const me = await piGetMe(accessToken);
-  const user = await upsertUserFromMe(me);
+    // Verify user identity and bind payment to that user in our DB for audit.
+    const me = await piGetMe(accessToken);
+    const user = await upsertUserFromMe(me);
 
-  const dto = await piApprovePayment(paymentId);
-  await prisma.payment.upsert({
-    where: { piPaymentId: dto.identifier },
-    update: { userId: user.id },
-    create: {
-      piPaymentId: dto.identifier,
-      direction: dto.direction,
-      network: dto.network,
-      amountPi: dto.amount,
-      memo: dto.memo ?? "",
-      metadata: dto.metadata ?? {},
-      txid: dto.transaction?.txid ?? null,
-      statusDeveloperApproved: !!dto.status?.developer_approved,
-      statusTransactionVerified: !!dto.status?.transaction_verified,
-      statusDeveloperCompleted: !!dto.status?.developer_completed,
-      statusCancelled: !!dto.status?.cancelled,
-      statusUserCancelled: !!dto.status?.user_cancelled,
-      userId: user.id,
-    },
-  });
+    const dto = await piApprovePayment(paymentId);
+    await prisma.payment.upsert({
+      where: { piPaymentId: dto.identifier },
+      update: { userId: user.id },
+      create: {
+        piPaymentId: dto.identifier,
+        direction: dto.direction,
+        network: dto.network,
+        amountPi: dto.amount,
+        memo: dto.memo ?? "",
+        metadata: dto.metadata ?? {},
+        txid: dto.transaction?.txid ?? null,
+        statusDeveloperApproved: !!dto.status?.developer_approved,
+        statusTransactionVerified: !!dto.status?.transaction_verified,
+        statusDeveloperCompleted: !!dto.status?.developer_completed,
+        statusCancelled: !!dto.status?.cancelled,
+        statusUserCancelled: !!dto.status?.user_cancelled,
+        userId: user.id,
+      },
+    });
 
-  res.json({ ok: true });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.post("/api/payments/:paymentId/complete", async (req, res) => {
@@ -111,6 +115,22 @@ app.post("/api/spin", async (req, res) => {
   const user = await upsertUserFromMe(me);
 
   const result = await spin({ userId: user.id, betCredits });
+  res.json(result);
+});
+
+// --- Bonus pick ---
+app.post("/api/bonus-pick", async (req, res) => {
+  const Body = z.object({
+    accessToken: z.string().min(10),
+    spinId: z.string().min(5),
+    picks: z.array(z.number().int().min(0).max(11)).length(3),
+  });
+  const { accessToken, spinId, picks } = Body.parse(req.body);
+
+  const me = await piGetMe(accessToken);
+  const user = await upsertUserFromMe(me);
+
+  const result = await bonusPick({ userId: user.id, spinId, picks });
   res.json(result);
 });
 
