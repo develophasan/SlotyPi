@@ -328,21 +328,40 @@ function renderGame() {
       ),
     ]),
     el("div", { class: "game-controls" }, [
-      el("button", {
-        class: `spin-btn ${state.isSpinning ? "spinning" : ""}`,
-        onClick: (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          console.log("Spin button clicked", { 
-            isSpinning: state.isSpinning, 
-            hasToken: !!state.accessToken, 
-            balance: state.balanceCredits, 
-            bet: currentBet 
-          });
-          doSpin();
-        },
-        disabled: state.isSpinning || !state.accessToken || state.balanceCredits < currentBet,
-      }, [state.isSpinning ? "⏳" : "🎰 ÇEVİR"]),
+      (() => {
+        const isDisabled = state.isSpinning || !state.accessToken || state.balanceCredits < currentBet;
+        let disabledReason = "";
+        if (state.isSpinning) disabledReason = "Spin devam ediyor...";
+        else if (!state.accessToken) disabledReason = "Giriş yapmanız gerekiyor";
+        else if (state.balanceCredits < currentBet) disabledReason = `Yetersiz bakiye (${state.balanceCredits} < ${currentBet})`;
+        
+        return el("div", { class: "spin-control-wrapper" }, [
+          el("button", {
+            class: `spin-btn ${state.isSpinning ? "spinning" : ""} ${isDisabled ? "disabled" : ""}`,
+            onClick: (e) => {
+              if (isDisabled) {
+                e.preventDefault();
+                e.stopPropagation();
+                state.lastError = disabledReason;
+                render();
+                return;
+              }
+              e.preventDefault();
+              e.stopPropagation();
+              console.log("Spin button clicked", { 
+                isSpinning: state.isSpinning, 
+                hasToken: !!state.accessToken, 
+                balance: state.balanceCredits, 
+                bet: currentBet 
+              });
+              doSpin();
+            },
+            disabled: isDisabled,
+            title: disabledReason || "Çevir",
+          }, [state.isSpinning ? "⏳" : "🎰 ÇEVİR"]),
+          isDisabled && disabledReason ? el("div", { class: "spin-disabled-hint" }, [disabledReason]) : null,
+        ]);
+      })(),
     ]),
     ...(state.lastSpin && state.lastSpin.winCredits > 0
       ? [el("div", { class: "last-win" }, [`Son Kazanç: ${fmt(state.lastSpin.winCredits)} kredi`])]
@@ -699,6 +718,12 @@ function render() {
         text-align: center;
         margin: 24px 0;
       }
+      .spin-control-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
       .spin-btn {
         padding: 20px 60px;
         font-size: 24px;
@@ -712,9 +737,19 @@ function render() {
         transition: all 0.3s;
         min-width: 200px;
       }
-      .spin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .spin-btn:disabled { 
+        opacity: 0.6; 
+        cursor: not-allowed; 
+        background: linear-gradient(135deg, #666, #888);
+      }
       .spin-btn.spinning {
         animation: spin-pulse 1s infinite;
+      }
+      .spin-disabled-hint {
+        font-size: 14px;
+        color: var(--muted);
+        text-align: center;
+        margin-top: 4px;
       }
       @keyframes spin-pulse {
         0%, 100% { transform: scale(1); box-shadow: 0 6px 30px rgba(0, 212, 255, 0.5); }
