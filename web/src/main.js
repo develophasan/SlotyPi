@@ -1,10 +1,9 @@
 import { z } from "zod";
 
 // Lokal geliştirmede: http://localhost:8787
-// Production'da (Netlify): VITE_API_BASE env değişkeni ile Railway backend URL'i verilecek.
+// Production'da (Railway): VITE_API_BASE env değişkeni ile Railway backend URL'i verilecek.
 const API_BASE =
-  import.meta.env.VITE_API_BASE ||
-  `${window.location.protocol}//${window.location.hostname}:8787`;
+  import.meta.env.VITE_API_BASE || "http://localhost:8787";
 
 const state = {
   accessToken: null,
