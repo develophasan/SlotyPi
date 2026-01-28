@@ -3,7 +3,10 @@ import { z } from "zod";
 // Lokal geliştirmede: http://localhost:8787
 // Production'da (Railway): VITE_BACKEND_URL env değişkeni ile Railway backend URL'i verilecek.
 const API_BASE =
-  import.meta.env.VITE_BACKEND_URL || "http://localhost:8787";
+  import.meta.env.VITE_BACKEND_URL ||
+  (import.meta.env.MODE === "production"
+    ? "https://slotypi-backend-production.up.railway.app"
+    : "http://localhost:8787");
 
 const state = {
   accessToken: null,
