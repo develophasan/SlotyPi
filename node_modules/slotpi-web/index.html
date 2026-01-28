@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SlotPi</title>
+
+    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+    <script>
+      // Production (Netlify) ve Testnet kullanım için sandbox:false
+      // Ağ/Network seçimi Developer Portal app ayarından gelir.
+      Pi.init({ version: "2.0" });
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+
+

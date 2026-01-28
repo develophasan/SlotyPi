@@ -1,0 +1,10 @@
+[build]
+  base = "web"
+  command = "npm run build"
+  publish = "web/dist"
+
+[environment]
+  # Netlify panelinden VITE_API_BASE olarak Railway backend URL'ini (https://...railway.app) ayarlayacaksın.
+  # Buraya sadece dokümantasyon amaçlı yazıyoruz.
+
+
